@@ -49,11 +49,16 @@ IMPORTANT RULES:
 # ============================
 @st.cache_resource
 def load_model_and_session():
-    model = genai.GenerativeModel(
-        "gemini-2.5-flash",
-        system_instruction=HUMANITIES_PROMPT
-    )
-    return model.start_chat()
+    # Try different model names - use one that works
+    try:
+        model = genai.GenerativeModel(
+            "gemini-1.5-flash",  # Try this model name
+            system_instruction=HUMANITIES_PROMPT
+        )
+        return model.start_chat(history=[])
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
+        return None
 
 chat_session = load_model_and_session()
 
@@ -75,29 +80,38 @@ def reset_input():
 # ============================
 # INPUT BOX
 # ============================
-st.text_input(
+user_input = st.text_input(
     "Ask something:",
     key="user_input",
-    on_change=reset_input,
     placeholder="Type here...",
 )
-
 
 # ============================
 # HANDLE MESSAGE
 # ============================
-if st.session_state.user_input.strip():
-    user_msg = st.session_state.user_input.strip()
+if user_input and user_input.strip():
+    user_msg = user_input.strip()
 
     st.session_state.chat_history.append(("You", user_msg))
 
     try:
-        response = chat_session.send_message(user_msg)
-        bot_reply = response.text
+        if chat_session is None:
+            st.error("Chat session not initialized. Please check the model configuration.")
+        else:
+            with st.spinner("Thinking..."):
+                response = chat_session.send_message(user_msg)
+                bot_reply = response.text
+            
+            st.session_state.chat_history.append(("Bot", bot_reply))
+            
+            # Reset input after successful processing
+            reset_input()
+            
     except Exception as e:
-        bot_reply = f"⚠️ Error: {str(e)}"
-
-    st.session_state.chat_history.append(("Bot", bot_reply))
+        error_msg = f"⚠️ Error: {str(e)}"
+        st.session_state.chat_history.append(("Bot", error_msg))
+        st.error(f"Detailed error: {e}")
+        reset_input()
 
 
 # ============================
@@ -108,3 +122,8 @@ for speaker, msg in st.session_state.chat_history:
         st.markdown(f"**🧑 You:** {msg}")
     else:
         st.markdown(f"**🤖 Bot:** {msg}")
+
+# Add a clear button
+if st.button("Clear Chat"):
+    st.session_state.chat_history = []
+    st.rerun()
